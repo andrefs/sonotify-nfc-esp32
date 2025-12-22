@@ -18,3 +18,4 @@ sdkconfig.h
 *.swp
 
 managed_components
+.aider*
