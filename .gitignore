@@ -1,0 +1,18 @@
+.cache
+
+# Build output
+/build/
+
+# ESP-IDF config
+sdkconfig
+sdkconfig.old
+sdkconfig.h
+
+# Flash & debug artifacts
+*.elf
+*.map
+*.bin
+
+# OS / editor junk
+.DS_Store
+*.swp
