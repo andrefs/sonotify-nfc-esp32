@@ -1,0 +1,34 @@
+alias: Play Spotify on Sonos via Webhook
+description: Play a Spotify URI on a Sonos speaker when a webhook is received
+triggers:
+  - trigger: webhook
+    allowed_methods:
+      - POST
+      - PUT
+    local_only: true
+    webhook_id: "-dn2X8lTcvihVvBkWAttrVEwZ"
+conditions:
+  - condition: template
+    value_template: |
+      {{ trigger.data['entity_id'] in [
+        'media_player.roam_2',
+        'media_player.sonos_move'
+      ] }}
+  - condition: time
+    after: "08:00:00"
+    before: "23:30:00"
+actions:
+  - data:
+      volume_level: 0.29
+    action: media_player.volume_set
+    target:
+      entity_id: "{{ trigger.data['entity_id'] }}"
+  - data:
+      media:
+        media_content_id: "{{ trigger.data['uri'] }}"
+        media_content_type: music
+        metadata: {}
+    action: media_player.play_media
+    target:
+      entity_id: "{{ trigger.data['entity_id'] }}"
+mode: single
