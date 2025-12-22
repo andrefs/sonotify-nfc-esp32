@@ -1,0 +1,2 @@
+CONFIG_WIFI_SSID="changeme"
+CONFIG_WIFI_PASSWORD="changeme"
