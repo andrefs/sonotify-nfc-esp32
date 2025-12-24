@@ -21,11 +21,91 @@
 
 #include "cJSON.h"
 
+#include "driver/rc522_spi.h"
+#include "rc522.h"
+#include "rc522_picc.h"
+#include <driver/gpio.h>
+#include <esp_log.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
+// --- Pin definitions ---
+#define RC522_SPI_BUS_GPIO_MISO 25
+#define RC522_SPI_BUS_GPIO_MOSI 23
+#define RC522_SPI_BUS_GPIO_SCLK 19
+#define RC522_SPI_SCANNER_GPIO_SDA 22
+#define RC522_SCANNER_GPIO_RST 21
+
+#define RC522_PICC_UID_HEXSTR_MAX                                              \
+  32 // enough for 10-byte UID + separators + null
+
+/**
+ * @brief Get the UID of a card as a hex string.
+ * @param picc Pointer to rc522_picc_t
+ * @return Pointer to static buffer containing hex string (colon-separated)
+ */
+const char *rc522_get_hexstr(const rc522_picc_t *picc) {
+  static char uid_str[RC522_PICC_UID_HEXSTR_MAX] = {0};
+  if (!picc) {
+    return NULL;
+  }
+
+  // rc522_picc_uid_to_str returns esp_err_t, ignore error for simplicity
+  rc522_picc_uid_to_str(&picc->uid, uid_str, sizeof(uid_str));
+  return uid_str;
+}
+
+// --- Driver and scanner handles ---
+static rc522_spi_config_t driver_config = {
+    .host_id = SPI3_HOST,
+    .bus_config = &(spi_bus_config_t){.miso_io_num = RC522_SPI_BUS_GPIO_MISO,
+                                      .mosi_io_num = RC522_SPI_BUS_GPIO_MOSI,
+                                      .sclk_io_num = RC522_SPI_BUS_GPIO_SCLK,
+                                      .quadwp_io_num = -1,
+                                      .quadhd_io_num = -1,
+                                      .max_transfer_sz = 0},
+    .dev_config =
+        {
+            .spics_io_num = RC522_SPI_SCANNER_GPIO_SDA,
+            .clock_speed_hz = 1 * 1000 * 000 // 1 MHz safe speed
+        },
+    .rst_io_num = RC522_SCANNER_GPIO_RST,
+};
+
+static rc522_driver_handle_t driver;
+static rc522_handle_t scanner;
+
+// --- Event callback ---
+static void on_picc_state_changed(void *arg, esp_event_base_t base,
+                                  int32_t event_id, void *data) {
+  rc522_picc_state_changed_event_t *event =
+      (rc522_picc_state_changed_event_t *)data;
+  rc522_picc_t *picc = event->picc;
+
+  if (picc->state == RC522_PICC_STATE_ACTIVE ||
+      picc->state == RC522_PICC_STATE_ACTIVE_H) {
+
+    const char *uid_hex = rc522_get_hexstr(picc);
+    ESP_LOGI("RC522", "Card UID: %s", uid_hex);
+
+  } else if (picc->state == RC522_PICC_STATE_IDLE &&
+             event->old_state >= RC522_PICC_STATE_ACTIVE) {
+    ESP_LOGI("RC522", "Card has been removed");
+  }
+}
+
+// ===============================
+// WIFI
+// ===============================
+
 #define WIFI_SSID CONFIG_WIFI_SSID
 #define WIFI_PASS CONFIG_WIFI_PASSWORD
-#define JSON_URL "https://raw.githubusercontent.com/andrefs/sonotify-nfc-esp32/main/dispatch.json"
+#define JSON_URL                                                               \
+  "https://raw.githubusercontent.com/andrefs/sonotify-nfc-esp32/main/"         \
+  "dispatch.json"
 #define MAX_HTTP_RECV_BUFFER 4096
-#define HA_WEBHOOK_URL "http://192.168.1.32:8123/api/webhook/-dn2X8lTcvihVvBkWAttrVEwZ"
+#define HA_WEBHOOK_URL                                                         \
+  "http://192.168.1.32:8123/api/webhook/-dn2X8lTcvihVvBkWAttrVEwZ"
 #define SONOS_ENTITY_ID "media_player.roam_2"
 
 static const char *TAG = "wifi_test";
@@ -128,32 +208,30 @@ char *download_json(void) {
   return buffer;
 }
 
+char *read_json_file(const char *filename) {
+  FILE *f = fopen(filename, "r");
+  if (!f) {
+    ESP_LOGE(TAG, "Failed to open file: %s", filename);
+    return NULL;
+  }
 
-char* read_json_file(const char* filename)
-{
-    FILE* f = fopen(filename, "r");
-    if (!f) {
-        ESP_LOGE(TAG, "Failed to open file: %s", filename);
-        return NULL;
-    }
+  fseek(f, 0, SEEK_END);
+  long fsize = ftell(f);
+  fseek(f, 0, SEEK_SET);
 
-    fseek(f, 0, SEEK_END);
-    long fsize = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    char* json = malloc(fsize + 1);
-    if (!json) {
-        ESP_LOGE(TAG, "Out of memory");
-        fclose(f);
-        return NULL;
-    }
-
-    fread(json, 1, fsize, f);
-    json[fsize] = '\0';
+  char *json = malloc(fsize + 1);
+  if (!json) {
+    ESP_LOGE(TAG, "Out of memory");
     fclose(f);
+    return NULL;
+  }
 
-    ESP_LOGI(TAG, "Read JSON (%ld bytes): %s", fsize, json);
-    return json;
+  fread(json, 1, fsize, f);
+  json[fsize] = '\0';
+  fclose(f);
+
+  ESP_LOGI(TAG, "Read JSON (%ld bytes): %s", fsize, json);
+  return json;
 }
 
 bool select_entity(const char *json, char *out_spotify_uri, size_t uri_len) {
@@ -281,6 +359,10 @@ void setup_wifi() {
   }
 }
 
+// ===============================
+// Main application
+// ===============================
+
 void app_main(void) {
   ESP_ERROR_CHECK(nvs_flash_init());
   ESP_ERROR_CHECK(esp_netif_init());
@@ -296,7 +378,7 @@ void app_main(void) {
   char spotify_uri[128];
 
   char *json = read_json_file("/spiffs/dispatch.json");
-  if(json){
+  if (json) {
     if (select_entity(json, spotify_uri, sizeof(spotify_uri))) {
       ESP_LOGI(TAG, "Selected Spotify URI: %s", spotify_uri);
       ESP_LOGI(TAG, "SONOS Entity ID: %s", SONOS_ENTITY_ID);
@@ -305,7 +387,40 @@ void app_main(void) {
       ESP_LOGE(TAG, "Failed to select entity from JSON");
     }
   }
-  
+
+  esp_err_t ret;
+
+  // --- Hardware reset ---
+  gpio_reset_pin(driver_config.rst_io_num);
+  gpio_set_direction(driver_config.rst_io_num, GPIO_MODE_OUTPUT);
+  gpio_set_level(driver_config.rst_io_num, 0);
+  vTaskDelay(pdMS_TO_TICKS(50));
+  gpio_set_level(driver_config.rst_io_num, 1);
+  vTaskDelay(pdMS_TO_TICKS(50));
+
+  // --- Create SPI driver ---
+  ret = rc522_spi_create(&driver_config, &driver);
+  ESP_ERROR_CHECK(ret);
+
+  // --- Install driver ---
+  ret = rc522_driver_install(driver);
+  ESP_ERROR_CHECK(ret);
+
+  // --- Create scanner ---
+  rc522_config_t scanner_config = {
+      .driver = driver,
+  };
+  ret = rc522_create(&scanner_config, &scanner);
+  ESP_ERROR_CHECK(ret);
+
+  // --- Register event handler ---
+  rc522_register_events(scanner, RC522_EVENT_PICC_STATE_CHANGED,
+                        on_picc_state_changed, NULL);
+
+  // --- Start scanning ---
+  ret = rc522_start(scanner);
+  ESP_LOGI(TAG, "rc522_start returned: %s", esp_err_to_name(ret));
+
   free(json);
   return;
 }
