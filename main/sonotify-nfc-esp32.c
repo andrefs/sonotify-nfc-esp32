@@ -36,8 +36,16 @@
 #define RC522_SPI_SCANNER_GPIO_SDA 22
 #define RC522_SCANNER_GPIO_RST 21
 
-#define RC522_PICC_UID_HEXSTR_MAX                                              \
-  32 // enough for 10-byte UID + separators + null
+// enough for 10-byte UID + separators + null
+#define RC522_PICC_UID_HEXSTR_MAX 32
+
+#define HA_WEBHOOK_URL                                                         \
+  "http://192.168.1.32:8123/api/webhook/-dn2X8lTcvihVvBkWAttrVEwZ"
+
+static const char *TAG = "wifi_test";
+char *json;
+char spotify_uri[128];
+#define SONOS_ENTITY_ID "media_player.roam_2"
 
 /**
  * @brief Get the UID of a card as a hex string.
@@ -75,6 +83,78 @@ static rc522_spi_config_t driver_config = {
 static rc522_driver_handle_t driver;
 static rc522_handle_t scanner;
 
+// Parse JSON and select entity based on UID matching item .tagId
+bool select_entity(const char *json, char *out_spotify_uri, size_t uri_len,
+                   char *uid_hex) {
+  cJSON *root = cJSON_Parse(json);
+  if (!root || !cJSON_IsArray(root)) {
+    ESP_LOGE(TAG, "Failed to parse JSON");
+    cJSON_Delete(root);
+    return false;
+  }
+
+  cJSON *selected = NULL;
+  cJSON *item;
+  cJSON_ArrayForEach(item, root) {
+    cJSON *tagId = cJSON_GetObjectItem(item, "tagId");
+    if (cJSON_IsString(tagId)) {
+      if (strcmp(tagId->valuestring, uid_hex) == 0) {
+        selected = item;
+        break;
+      }
+    }
+  }
+
+  if (!selected) {
+    ESP_LOGE(TAG, "No matching entity found for UID: %s", uid_hex);
+    cJSON_Delete(root);
+    return false;
+  }
+  cJSON *spotifyUri = cJSON_GetObjectItem(selected, "spotifyUri");
+  cJSON *description = cJSON_GetObjectItem(selected, "description");
+  if (!cJSON_IsString(spotifyUri)) {
+    ESP_LOGE(TAG, "spotifyUri not found or invalid");
+  }
+
+  strncpy(out_spotify_uri, spotifyUri->valuestring, uri_len - 1);
+  out_spotify_uri[uri_len - 1] = '\0';
+
+  ESP_LOGI(TAG, "Selected Spotify URI: %s (%s)", out_spotify_uri,
+           description->valuestring);
+  ESP_LOGI(TAG, "SONOS Entity ID: %s", SONOS_ENTITY_ID);
+
+  cJSON_Delete(root);
+  return true;
+}
+
+void send_http_post(const char *url, const char *spotify_uri) {
+  // Build POST body
+  char post_data[256];
+  snprintf(post_data, sizeof(post_data), "uri=%s&entity_id=%s", spotify_uri,
+           SONOS_ENTITY_ID);
+
+  esp_http_client_config_t config = {
+      .url = url,
+      .method = HTTP_METHOD_POST,
+  };
+
+  esp_http_client_handle_t client = esp_http_client_init(&config);
+  esp_http_client_set_header(client, "Content-Type",
+                             "application/x-www-form-urlencoded");
+  esp_http_client_set_post_field(client, post_data, strlen(post_data));
+
+  esp_err_t err = esp_http_client_perform(client);
+  if (err == ESP_OK) {
+    ESP_LOGI("HTTP", "POST Status = %d, content_length = %d",
+             esp_http_client_get_status_code(client),
+             esp_http_client_get_content_length(client));
+  } else {
+    ESP_LOGE("HTTP", "HTTP POST request failed: %s", esp_err_to_name(err));
+  }
+
+  esp_http_client_cleanup(client);
+}
+
 // --- Event callback ---
 static void on_picc_state_changed(void *arg, esp_event_base_t base,
                                   int32_t event_id, void *data) {
@@ -87,6 +167,13 @@ static void on_picc_state_changed(void *arg, esp_event_base_t base,
 
     const char *uid_hex = rc522_get_hexstr(picc);
     ESP_LOGI("RC522", "Card UID: %s", uid_hex);
+
+    if (select_entity(json, spotify_uri, sizeof(spotify_uri),
+                      (char *)uid_hex)) {
+      send_http_post(HA_WEBHOOK_URL, spotify_uri);
+    } else {
+      ESP_LOGE(TAG, "Failed to select entity from JSON");
+    }
 
   } else if (picc->state == RC522_PICC_STATE_IDLE &&
              event->old_state >= RC522_PICC_STATE_ACTIVE) {
@@ -104,11 +191,7 @@ static void on_picc_state_changed(void *arg, esp_event_base_t base,
   "https://raw.githubusercontent.com/andrefs/sonotify-nfc-esp32/main/"         \
   "dispatch.json"
 #define MAX_HTTP_RECV_BUFFER 4096
-#define HA_WEBHOOK_URL                                                         \
-  "http://192.168.1.32:8123/api/webhook/-dn2X8lTcvihVvBkWAttrVEwZ"
-#define SONOS_ENTITY_ID "media_player.roam_2"
 
-static const char *TAG = "wifi_test";
 static EventGroupHandle_t wifi_event_group;
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT BIT1
@@ -234,35 +317,6 @@ char *read_json_file(const char *filename) {
   return json;
 }
 
-bool select_entity(const char *json, char *out_spotify_uri, size_t uri_len) {
-  cJSON *root = cJSON_Parse(json);
-  if (!root || !cJSON_IsArray(root)) {
-    ESP_LOGE(TAG, "Failed to parse JSON");
-    cJSON_Delete(root);
-    return false;
-  }
-
-  cJSON *item = cJSON_GetArrayItem(root, 0);
-  if (!item) {
-    ESP_LOGE(TAG, "No items in JSON array");
-    cJSON_Delete(root);
-    return false;
-  }
-
-  cJSON *spotify_uri = cJSON_GetObjectItem(item, "spotifyUri");
-  if (!cJSON_IsString(spotify_uri)) {
-    ESP_LOGE(TAG, "Invalid JSON structure");
-    cJSON_Delete(root);
-    return false;
-  }
-
-  // Copy spotifyUri
-  strncpy(out_spotify_uri, spotify_uri->valuestring, uri_len);
-
-  cJSON_Delete(root);
-  return true;
-}
-
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data) {
   if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
@@ -282,34 +336,6 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
     retry_num = 0;
     xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT);
   }
-}
-
-void send_http_post(const char *url, const char *spotify_uri) {
-  // Build POST body
-  char post_data[256];
-  snprintf(post_data, sizeof(post_data), "uri=%s&entity_id=%s", spotify_uri,
-           SONOS_ENTITY_ID);
-
-  esp_http_client_config_t config = {
-      .url = url,
-      .method = HTTP_METHOD_POST,
-  };
-
-  esp_http_client_handle_t client = esp_http_client_init(&config);
-  esp_http_client_set_header(client, "Content-Type",
-                             "application/x-www-form-urlencoded");
-  esp_http_client_set_post_field(client, post_data, strlen(post_data));
-
-  esp_err_t err = esp_http_client_perform(client);
-  if (err == ESP_OK) {
-    ESP_LOGI("HTTP", "POST Status = %d, content_length = %d",
-             esp_http_client_get_status_code(client),
-             esp_http_client_get_content_length(client));
-  } else {
-    ESP_LOGE("HTTP", "HTTP POST request failed: %s", esp_err_to_name(err));
-  }
-
-  esp_http_client_cleanup(client);
 }
 
 void setup_wifi() {
@@ -375,17 +401,10 @@ void app_main(void) {
 
   init_spiffs();
 
-  char spotify_uri[128];
-
-  char *json = read_json_file("/spiffs/dispatch.json");
-  if (json) {
-    if (select_entity(json, spotify_uri, sizeof(spotify_uri))) {
-      ESP_LOGI(TAG, "Selected Spotify URI: %s", spotify_uri);
-      ESP_LOGI(TAG, "SONOS Entity ID: %s", SONOS_ENTITY_ID);
-      send_http_post(HA_WEBHOOK_URL, spotify_uri);
-    } else {
-      ESP_LOGE(TAG, "Failed to select entity from JSON");
-    }
+  json = read_json_file("/spiffs/dispatch.json");
+  if (!json) {
+    ESP_LOGE(TAG, "Failed to read JSON file");
+    return;
   }
 
   esp_err_t ret;
@@ -421,6 +440,6 @@ void app_main(void) {
   ret = rc522_start(scanner);
   ESP_LOGI(TAG, "rc522_start returned: %s", esp_err_to_name(ret));
 
-  free(json);
+  // free(json);
   return;
 }
