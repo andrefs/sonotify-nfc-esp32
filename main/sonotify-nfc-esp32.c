@@ -37,6 +37,10 @@
 #define RC522_SCANNER_GPIO_RST 21
 
 #define LED_GPIO GPIO_NUM_32
+#define LED_BLINK_OFF 0
+#define LED_BLINK_SLOW 1 // Wi-Fi connecting
+#define LED_BLINK_FAST 2 // HTTP error
+static volatile int led_blink_mode = LED_BLINK_OFF;
 
 // enough for 10-byte UID + separators + null
 #define RC522_PICC_UID_HEXSTR_MAX 32
@@ -147,8 +151,10 @@ void send_http_post(const char *url, const char *spotify_uri) {
     ESP_LOGI("HTTP", "POST Status = %d, content_length = %d",
              esp_http_client_get_status_code(client),
              esp_http_client_get_content_length(client));
+    led_blink_mode = LED_BLINK_OFF; // successful request
   } else {
     ESP_LOGE("HTTP", "HTTP POST request failed: %s", esp_err_to_name(err));
+    led_blink_mode = LED_BLINK_FAST; // indicate error
   }
 
   esp_http_client_cleanup(client);
@@ -322,17 +328,21 @@ char *read_json_file(const char *filename) {
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data) {
   if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
+    led_blink_mode = LED_BLINK_SLOW; // Wi-Fi connecting
     esp_wifi_connect();
   } else if (event_base == WIFI_EVENT &&
              event_id == WIFI_EVENT_STA_DISCONNECTED) {
     if (retry_num < MAX_RETRY) {
+      led_blink_mode = LED_BLINK_SLOW; // still connecting
       esp_wifi_connect();
       retry_num++;
       ESP_LOGI(TAG, "Retrying connection...");
     } else {
+      led_blink_mode = LED_BLINK_FAST; // Wi-Fi failed
       xEventGroupSetBits(wifi_event_group, WIFI_FAIL_BIT);
     }
   } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+    led_blink_mode = LED_BLINK_OFF; // connected
     ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
     ESP_LOGI(TAG, "Got IP:" IPSTR, IP2STR(&event->ip_info.ip));
     retry_num = 0;
@@ -397,6 +407,28 @@ static void led_init(void) {
   gpio_set_level(LED_GPIO, 0); // LED off initially
 }
 
+static void led_blink_task(void *arg) {
+  int led_state = 0;
+  while (1) {
+    switch (led_blink_mode) {
+    case LED_BLINK_OFF:
+      gpio_set_level(LED_GPIO, 0);
+      vTaskDelay(pdMS_TO_TICKS(200));
+      break;
+    case LED_BLINK_SLOW:
+      led_state = !led_state;
+      gpio_set_level(LED_GPIO, led_state);
+      vTaskDelay(pdMS_TO_TICKS(500)); // 0.5 Hz
+      break;
+    case LED_BLINK_FAST:
+      led_state = !led_state;
+      gpio_set_level(LED_GPIO, led_state);
+      vTaskDelay(pdMS_TO_TICKS(100)); // 5 Hz
+      break;
+    }
+  }
+}
+
 // ===============================
 // Main application
 // ===============================
@@ -420,6 +452,7 @@ void app_main(void) {
   }
 
   led_init();
+  xTaskCreate(led_blink_task, "led_blink_task", 1024, NULL, 5, NULL);
 
   esp_err_t ret;
 
