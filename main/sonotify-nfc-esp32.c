@@ -36,6 +36,8 @@
 #define RC522_SPI_SCANNER_GPIO_SDA 22
 #define RC522_SCANNER_GPIO_RST 21
 
+#define LED_GPIO GPIO_NUM_32
+
 // enough for 10-byte UID + separators + null
 #define RC522_PICC_UID_HEXSTR_MAX 32
 
@@ -162,6 +164,8 @@ static void on_picc_state_changed(void *arg, esp_event_base_t base,
   if (picc->state == RC522_PICC_STATE_ACTIVE ||
       picc->state == RC522_PICC_STATE_ACTIVE_H) {
 
+    gpio_set_level(LED_GPIO, 1); // LED ON
+
     const char *uid_hex = rc522_get_hexstr(picc);
     ESP_LOGI("RC522", "Card UID: %s", uid_hex);
 
@@ -174,6 +178,7 @@ static void on_picc_state_changed(void *arg, esp_event_base_t base,
 
   } else if (picc->state == RC522_PICC_STATE_IDLE &&
              event->old_state >= RC522_PICC_STATE_ACTIVE) {
+    gpio_set_level(LED_GPIO, 0); // LED OFF
     ESP_LOGI("RC522", "Card has been removed");
   }
 }
@@ -383,6 +388,16 @@ void setup_wifi() {
 }
 
 // ===============================
+// LED
+// ==============================
+
+static void led_init(void) {
+  gpio_reset_pin(LED_GPIO);
+  gpio_set_direction(LED_GPIO, GPIO_MODE_OUTPUT);
+  gpio_set_level(LED_GPIO, 0); // LED off initially
+}
+
+// ===============================
 // Main application
 // ===============================
 
@@ -403,6 +418,8 @@ void app_main(void) {
     ESP_LOGE(TAG, "Failed to read JSON file");
     return;
   }
+
+  led_init();
 
   esp_err_t ret;
 
