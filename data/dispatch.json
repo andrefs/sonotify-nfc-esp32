@@ -1,12 +1,29 @@
 [
   {
     "tagId": "REDACTED_TAG_UID",
-    "spotifyUri": "REDACTED_SPOTIFY_URI",
+    "contentId": "REDACTED_SPOTIFY_URI",
     "description": "Andorinhas - Ana Moura"
   },
   {
     "tagId": "REDACTED_TAG_UID",
-    "spotifyUri": "spotify:track:1uxNXHgtww0yfbF9PKghHi",
-    "description": "Bote furado - Deolinda"
+    "contentId": "REDACTED_SPOTIFY_URI",
+    "description": "REDACTED_PLAYLIST_NAME"
+  },
+  {
+    "tagId": "7B 85 FB 03",
+    "contentId": "Histórias Alice",
+    "description": "Histórias (Sonos favorites)",
+    "contentType": "favorite_item_id"
+  },
+  {
+    "tagId": "REDACTED_TAG_UID",
+    "contentId": "Caravana de Histórias",
+    "description": "Caravana de Histórias (Sonos favorites)",
+    "contentType": "favorite_item_id"
+  },
+  {
+    "tagId": "REDACTED_TAG_UID",
+    "contentId": "REDACTED_SPOTIFY_URI",
+    "description": "REDACTED_PLAYLIST_NAME"
   }
 ]
