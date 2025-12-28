@@ -72,11 +72,8 @@ static rc522_spi_config_t driver_config = {
                                       .quadwp_io_num = -1,
                                       .quadhd_io_num = -1,
                                       .max_transfer_sz = 0},
-    .dev_config =
-        {
-            .spics_io_num = RC522_SPI_SCANNER_GPIO_SDA,
-            .clock_speed_hz = 1 * 1000 * 000 // 1 MHz safe speed
-        },
+    .dev_config = {.spics_io_num = RC522_SPI_SCANNER_GPIO_SDA,
+                   .clock_speed_hz = 200 * 1000},
     .rst_io_num = RC522_SCANNER_GPIO_RST,
 };
 
