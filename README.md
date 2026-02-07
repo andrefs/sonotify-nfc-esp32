@@ -64,4 +64,5 @@ Replace `/dev/ttyUSB0` with your serial adapter device.
 
 ## License
 
-This repository's files do not include a specific license file. Add an appropriate LICENSE if you plan to publish or redistribute.
+MIT License
+Copyright (c) 2026 André Santos
