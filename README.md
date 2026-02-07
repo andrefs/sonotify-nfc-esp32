@@ -1,6 +1,6 @@
 # sonotify-nfc-esp32
 
-ESP32 firmware that reads a dispatch JSON (list of NFC tag -> Spotify URIs) and sends a Home Assistant webhook to play a selected Spotify URI on a Sonos device.
+ESP32 firmware that reads a dispatch JSON (list of NFC tag -> Spotify URIs) and triggers a Home Assistant webhook to play a selected Spotify URI on a Sonos device.
 
 This repository contains a simple example using:
 - ESP-IDF
