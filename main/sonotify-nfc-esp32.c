@@ -50,7 +50,8 @@ static volatile int led_blink_mode = LED_BLINK_OFF;
 
 static const char *TAG = "wifi_test";
 char *json;
-char spotify_uri[128];
+char content_id[128];
+char content_type[64];
 #define SONOS_ENTITY_ID "REDACTED_ENTITY"
 
 /**
@@ -87,8 +88,7 @@ static rc522_driver_handle_t driver;
 static rc522_handle_t scanner;
 
 // Parse JSON and select entity based on UID matching item .tagId
-bool select_entity(const char *json, char *out_spotify_uri, size_t uri_len,
-                   char *uid_hex) {
+bool select_entity(const char *json, size_t id_len, char *uid_hex) {
   cJSON *root = cJSON_Parse(json);
   if (!root || !cJSON_IsArray(root)) {
     ESP_LOGE(TAG, "Failed to parse JSON");
@@ -113,28 +113,46 @@ bool select_entity(const char *json, char *out_spotify_uri, size_t uri_len,
     cJSON_Delete(root);
     return false;
   }
-  cJSON *spotifyUri = cJSON_GetObjectItem(selected, "spotifyUri");
+  cJSON *contentId = cJSON_GetObjectItem(selected, "contentId");
   cJSON *description = cJSON_GetObjectItem(selected, "description");
-  if (!cJSON_IsString(spotifyUri)) {
-    ESP_LOGE(TAG, "spotifyUri not found or invalid");
+  cJSON *contentType = cJSON_GetObjectItem(selected, "contentType");
+  ESP_LOGI(TAG, "Found entity with contentId: %s",
+           contentId ? contentId->valuestring : "null");
+  ESP_LOGI(TAG, "Description: %s",
+           description ? description->valuestring : "null");
+  ESP_LOGI(TAG, "ContentType: %s",
+           contentType ? contentType->valuestring : "null");
+  if (!cJSON_IsString(contentId)) {
+    ESP_LOGE(TAG, "contentId not found or invalid");
   }
 
-  strncpy(out_spotify_uri, spotifyUri->valuestring, uri_len - 1);
-  out_spotify_uri[uri_len - 1] = '\0';
+  strncpy(content_id, contentId->valuestring, id_len - 1);
+  content_id[id_len - 1] = '\0';
 
-  ESP_LOGI(TAG, "Selected Spotify URI: %s (%s)", out_spotify_uri,
-           description->valuestring);
+  if (cJSON_IsString(contentType)) {
+    strncpy(content_type, contentType->valuestring, sizeof(content_type) - 1);
+    content_type[sizeof(content_type) - 1] = '\0';
+  } else {
+    strncpy(content_type, "music", sizeof(content_type) - 1);
+    content_type[sizeof(content_type) - 1] = '\0';
+  }
+
+  ESP_LOGI(TAG, "Selected content id: %s (%s) %s", content_id,
+           description->valuestring, contentType->valuestring);
   ESP_LOGI(TAG, "SONOS Entity ID: %s", SONOS_ENTITY_ID);
 
   cJSON_Delete(root);
   return true;
 }
 
-void send_http_post(const char *url, const char *spotify_uri) {
+void send_http_post(const char *url, const char *content_id,
+                    const char *content_type) {
   // Build POST body
   char post_data[256];
-  snprintf(post_data, sizeof(post_data), "uri=%s&entity_id=%s", spotify_uri,
-           SONOS_ENTITY_ID);
+
+  snprintf(post_data, sizeof(post_data),
+           "content_id=%s&entity_id=%s&content_type=%s", content_id,
+           SONOS_ENTITY_ID, content_type);
 
   esp_http_client_config_t config = {
       .url = url,
@@ -175,9 +193,8 @@ static void on_picc_state_changed(void *arg, esp_event_base_t base,
     const char *uid_hex = rc522_get_hexstr(picc);
     ESP_LOGI("RC522", "Card UID: %s", uid_hex);
 
-    if (select_entity(json, spotify_uri, sizeof(spotify_uri),
-                      (char *)uid_hex)) {
-      send_http_post(HA_WEBHOOK_URL, spotify_uri);
+    if (select_entity(json, sizeof(content_id), (char *)uid_hex)) {
+      send_http_post(HA_WEBHOOK_URL, content_id, content_type);
     } else {
       ESP_LOGE(TAG, "Failed to select entity from JSON");
     }
@@ -434,6 +451,9 @@ static void led_blink_task(void *arg) {
 // ===============================
 
 void app_main(void) {
+  led_init();
+  gpio_set_level(LED_GPIO, 1); // LED ON
+
   ESP_ERROR_CHECK(nvs_flash_init());
   ESP_ERROR_CHECK(esp_netif_init());
   ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -451,7 +471,6 @@ void app_main(void) {
     return;
   }
 
-  led_init();
   xTaskCreate(led_blink_task, "led_blink_task", 1024, NULL, 5, NULL);
 
   esp_err_t ret;
@@ -487,6 +506,7 @@ void app_main(void) {
   ret = rc522_start(scanner);
   ESP_LOGI(TAG, "rc522_start returned: %s", esp_err_to_name(ret));
 
+  gpio_set_level(LED_GPIO, 0); // LED ON
   // free(json);
   return;
 }
