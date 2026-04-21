@@ -15,4 +15,6 @@ dependencies:
   #   # All dependencies of `main` are public by default.
   #   public: true
   espressif/cjson: '*'
-  abobija/rc522: '*'
+  abobija/rc522:
+    git: "https://github.com/abobija/esp-idf-rc522.git"
+    version: "8693cd9d63275045a2303d6f3ac520fd0849ef73"
