@@ -5,6 +5,7 @@ ESP32 firmware that reads a dispatch JSON (list of NFC tag -> Spotify URIs) and 
 ![20260207_164626](https://github.com/user-attachments/assets/1084bc28-154e-4e23-965f-d83a3879699b)
 
 This repository contains a simple example using:
+
 - ESP-IDF
 - SPIFFS (for storing `dispatch.json`)
 - cJSON (JSON parsing)
@@ -28,6 +29,7 @@ This repository contains a simple example using:
 ## Configuration
 
 - Wi‑Fi SSID and password are configured in menuconfig (`main/Kconfig.projbuild`):
+
   - `WIFI_SSID`
   - `WIFI_PASSWORD`
 
@@ -49,12 +51,13 @@ Refer to the ESP-IDF documentation for creating/packing SPIFFS data (component `
 ## Build & flash (quick)
 
 1. Configure the project:
+
    - idf.py menuconfig
    - Set Wi‑Fi values under the "WiFi Configuration" menu
 
 2. Build and flash:
    - idf.py build
-   - idf.py -p /dev/ttyUSB0 flash monitor
+   - idf.py [-p /dev/ttyUSB0] [-b 115200] flash monitor
 
 Replace `/dev/ttyUSB0` with your serial adapter device.
 

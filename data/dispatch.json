@@ -2,28 +2,25 @@
   {
     "tagId": "REDACTED_TAG_UID",
     "contentId": "REDACTED_SPOTIFY_URI",
-    "description": "Andorinhas - Ana Moura"
+    "description": "Andorinhas - Ana Moura",
+    "contentType": "music"
   },
   {
     "tagId": "REDACTED_TAG_UID",
     "contentId": "REDACTED_SPOTIFY_URI",
-    "description": "REDACTED_PLAYLIST_NAME"
-  },
-  {
-    "tagId": "7B 85 FB 03",
-    "contentId": "Histórias Alice",
-    "description": "Histórias (Sonos favorites)",
-    "contentType": "favorite_item_id"
+    "description": "REDACTED_PLAYLIST_NAME",
+    "contentType": "music"
   },
   {
     "tagId": "REDACTED_TAG_UID",
-    "contentId": "Caravana de Histórias",
-    "description": "Caravana de Histórias (Sonos favorites)",
+    "contentId": "SQ:0",
+    "description": "Caravana de Histórias",
     "contentType": "favorite_item_id"
   },
   {
     "tagId": "REDACTED_TAG_UID",
     "contentId": "REDACTED_SPOTIFY_URI",
-    "description": "REDACTED_PLAYLIST_NAME"
+    "description": "REDACTED_PLAYLIST_NAME",
+    "contentType": "music"
   }
 ]
