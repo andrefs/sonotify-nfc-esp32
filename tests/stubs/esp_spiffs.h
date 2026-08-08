@@ -1,0 +1,20 @@
+#ifndef ESP_SPIFFS_STUB_H
+#define ESP_SPIFFS_STUB_H
+
+#include <stdbool.h>
+#include <stddef.h>
+
+#include "esp_err.h"
+
+typedef struct {
+  const char *base_path;
+  const char *partition_label;
+  int max_files;
+  bool format_if_mount_failed;
+} esp_vfs_spiffs_conf_t;
+
+esp_err_t esp_vfs_spiffs_register(const esp_vfs_spiffs_conf_t *conf);
+esp_err_t esp_spiffs_info(const char *partition_label, size_t *total_bytes,
+                          size_t *used_bytes);
+
+#endif

@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  host-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake gcc libcjson-dev
+
+      - name: Build tests
+        run: |
+          cmake -S tests -B build-tests -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build-tests
+
+      - name: Run tests
+        run: ctest --test-dir build-tests --output-on-failure
