@@ -13,3 +13,22 @@ config WIFI_PASSWORD
         WiFi password
 
 endmenu
+
+menu "Home Assistant Integration"
+
+config HA_WEBHOOK_URL
+    string "Home Assistant webhook URL"
+    default ""
+    help
+        Full URL of the Home Assistant webhook that should be triggered to
+        play a media item on a Sonos device, for example:
+        http://192.168.1.10:8123/api/webhook/<generated-id>
+
+config SONOS_ENTITY_ID
+    string "Sonos media player entity ID"
+    default ""
+    help
+        Home Assistant entity_id of the Sonos speaker, for example:
+            media_player.living_room
+
+endmenu

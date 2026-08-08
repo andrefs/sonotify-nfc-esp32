@@ -1,3 +1,8 @@
+# Home Assistant automation template.
+#
+# IMPORTANT: after creating a webhook in Home Assistant, replace
+# CHANGE_ME_WITH_WEBHOOK_ID below with the generated webhook id and adapt the
+# placeholder values (entity list, volume, time window) to your setup.
 alias: Play Spotify on Sonos via Webhook
 description: Play a Spotify URI on a Sonos speaker when a webhook is received
 triggers:
@@ -6,27 +11,27 @@ triggers:
       - POST
       - PUT
     local_only: true
-    webhook_id: "REDACTED_HA_WEBHOOK"
+    webhook_id: "CHANGE_ME_WITH_WEBHOOK_ID"
 conditions:
   - condition: template
     value_template: |
       {{ trigger.data['entity_id'] in [
-        'REDACTED_ENTITY',
-        'REDACTED_ENTITY'
+        # TODO: replace with your Sonos media player entity ids
+        'media_player.example_speaker'
       ] }}
-  - condition: time
-    after: "08:00:00"
-    before: "23:30:00"
+  # - condition: time
+  #   after: "08:00:00"
+  #   before: "23:30:00"
 actions:
-  - data:
-      volume_level: 0.29
-    action: media_player.volume_set
-    target:
-      entity_id: "{{ trigger.data['entity_id'] }}"
+  # - data:
+  #     volume_level: 0.30
+  #   action: media_player.volume_set
+  #   target:
+  #     entity_id: "{{ trigger.data['entity_id'] }}"
   - data:
       media:
-        media_content_id: "{{ trigger.data['uri'] }}"
-        media_content_type: music
+        media_content_id: "{{ trigger.data['content_id'] }}"
+        media_content_type: "{{ trigger.data['content_type'] }}"
         metadata: {}
     action: media_player.play_media
     target:

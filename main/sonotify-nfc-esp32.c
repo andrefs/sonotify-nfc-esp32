@@ -45,14 +45,10 @@ static volatile int led_blink_mode = LED_BLINK_OFF;
 // enough for 10-byte UID + separators + null
 #define RC522_PICC_UID_HEXSTR_MAX 32
 
-#define HA_WEBHOOK_URL                                                         \
-  "REDACTED_HA_WEBHOOK"
-
 static const char *TAG = "wifi_test";
 char *json;
 char content_id[128];
 char content_type[64];
-#define SONOS_ENTITY_ID "REDACTED_ENTITY"
 
 /**
  * @brief Get the UID of a card as a hex string.
@@ -139,7 +135,7 @@ bool select_entity(const char *json, size_t id_len, char *uid_hex) {
 
   ESP_LOGI(TAG, "Selected content id: %s (%s) %s", content_id,
            description->valuestring, contentType->valuestring);
-  ESP_LOGI(TAG, "SONOS Entity ID: %s", SONOS_ENTITY_ID);
+  ESP_LOGI(TAG, "SONOS Entity ID: %s", CONFIG_SONOS_ENTITY_ID);
 
   cJSON_Delete(root);
   return true;
@@ -152,7 +148,7 @@ void send_http_post(const char *url, const char *content_id,
 
   snprintf(post_data, sizeof(post_data),
            "content_id=%s&entity_id=%s&content_type=%s", content_id,
-           SONOS_ENTITY_ID, content_type);
+           CONFIG_SONOS_ENTITY_ID, content_type);
 
   esp_http_client_config_t config = {
       .url = url,
@@ -194,7 +190,7 @@ static void on_picc_state_changed(void *arg, esp_event_base_t base,
     ESP_LOGI("RC522", "Card UID: %s", uid_hex);
 
     if (select_entity(json, sizeof(content_id), (char *)uid_hex)) {
-      send_http_post(HA_WEBHOOK_URL, content_id, content_type);
+      send_http_post(CONFIG_HA_WEBHOOK_URL, content_id, content_type);
     } else {
       ESP_LOGE(TAG, "Failed to select entity from JSON");
     }
@@ -212,18 +208,12 @@ static void on_picc_state_changed(void *arg, esp_event_base_t base,
 
 #define WIFI_SSID CONFIG_WIFI_SSID
 #define WIFI_PASS CONFIG_WIFI_PASSWORD
-#define JSON_URL                                                               \
-  "https://raw.githubusercontent.com/andrefs/sonotify-nfc-esp32/main/"         \
-  "dispatch.json"
-#define MAX_HTTP_RECV_BUFFER 4096
 
 static EventGroupHandle_t wifi_event_group;
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT BIT1
 static int retry_num = 0;
 #define MAX_RETRY 5
-
-#define MAX_HTTP_RECV_BUFFER 4096
 
 bool init_spiffs(void) {
   esp_vfs_spiffs_conf_t conf = {.base_path = "/spiffs",
@@ -247,73 +237,6 @@ bool init_spiffs(void) {
   esp_spiffs_info(NULL, &total, &used);
   ESP_LOGI(TAG, "SPIFFS total: %d, used: %d", total, used);
   return true;
-}
-
-char *download_json(void) {
-  esp_http_client_config_t config = {
-      .url = JSON_URL,
-      .method = HTTP_METHOD_GET,
-      .timeout_ms = 10000,
-      .crt_bundle_attach = esp_crt_bundle_attach,
-      .disable_auto_redirect = false,
-  };
-
-  esp_http_client_handle_t client = esp_http_client_init(&config);
-  if (!client) {
-    ESP_LOGE(TAG, "Failed to init HTTP client");
-    return NULL;
-  }
-
-  // Open the connection manually
-  esp_err_t err = esp_http_client_open(client, 0);
-  if (err != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
-    esp_http_client_cleanup(client);
-    return NULL;
-  }
-
-  int status = esp_http_client_get_status_code(client);
-  ESP_LOGI(TAG, "HTTP status code: %d", status);
-  if (status != 200) {
-    ESP_LOGE(TAG, "Server returned non-200 status");
-    esp_http_client_close(client);
-    esp_http_client_cleanup(client);
-    return NULL;
-  }
-
-  char *buffer = malloc(MAX_HTTP_RECV_BUFFER);
-  if (!buffer) {
-    ESP_LOGE(TAG, "Out of memory");
-    esp_http_client_close(client);
-    esp_http_client_cleanup(client);
-    return NULL;
-  }
-
-  int total_len = 0;
-  int read_len;
-  while ((read_len =
-              esp_http_client_read(client, buffer + total_len,
-                                   MAX_HTTP_RECV_BUFFER - total_len - 1)) > 0) {
-    total_len += read_len;
-    if (total_len >= MAX_HTTP_RECV_BUFFER - 1) {
-      ESP_LOGW(TAG, "Buffer full, JSON truncated");
-      break;
-    }
-  }
-
-  buffer[total_len] = '\0';
-  ESP_LOGI(TAG, "Downloaded JSON length: %d", total_len);
-  ESP_LOGI(TAG, "Downloaded JSON: %s", buffer);
-
-  esp_http_client_close(client);
-  esp_http_client_cleanup(client);
-
-  if (total_len == 0) {
-    free(buffer);
-    return NULL;
-  }
-
-  return buffer;
 }
 
 char *read_json_file(const char *filename) {
