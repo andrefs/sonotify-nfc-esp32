@@ -20,3 +20,4 @@ sdkconfig.h
 managed_components
 .aider*
 secrets.txt
+data/dispatch.json
