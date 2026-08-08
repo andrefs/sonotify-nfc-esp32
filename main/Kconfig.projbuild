@@ -12,6 +12,58 @@ config WIFI_PASSWORD
     help
         WiFi password
 
+config WIFI_MAX_RETRY
+    int "WiFi connection retries"
+    default 5
+    help
+        Number of connection attempts before the firmware gives up.
+
+endmenu
+
+menu "Hardware Pin Configuration"
+
+config RC522_SPI_BUS_GPIO_MISO
+    int "RC522 SPI MISO GPIO"
+    default 25
+    help
+        GPIO connected to the RC522 MSO (MISO) pin.
+
+config RC522_SPI_BUS_GPIO_MOSI
+    int "RC522 SPI MOSI GPIO"
+    default 23
+    help
+        GPIO connected to the RC522 MOSI pin.
+
+config RC522_SPI_BUS_GPIO_SCLK
+    int "RC522 SPI SCLK GPIO"
+    default 19
+    help
+        GPIO connected to the RC522 SCK pin.
+
+config RC522_SPI_SCANNER_GPIO_SDA
+    int "RC522 SPI chip-select (SDA) GPIO"
+    default 22
+    help
+        GPIO connected to the RC522 SDA (chip select) pin.
+
+config RC522_SCANNER_GPIO_RST
+    int "RC522 RST GPIO"
+    default 21
+    help
+        GPIO connected to the RC522 RST pin.
+
+config RC522_SPI_CLOCK_HZ
+    int "RC522 SPI clock (Hz)"
+    default 200000
+    help
+        SPI bus clock frequency used to talk to the RC522.
+
+config LED_GPIO
+    int "Status LED GPIO"
+    default 32
+    help
+        GPIO driving the status LED.
+
 endmenu
 
 menu "Home Assistant Integration"
