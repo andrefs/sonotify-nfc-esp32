@@ -1,7 +1,5 @@
 #include "rc522_scanner.h"
 
-#include <string.h>
-
 #include "driver/gpio.h"
 #include "driver/rc522_spi.h"
 #include "esp_log.h"
@@ -25,6 +23,8 @@ static const char *TAG = "rc522";
 
 // enough for 10-byte UID + separators + null
 #define RC522_PICC_UID_HEXSTR_MAX 32
+#define RC522_START_RETRIES 3
+#define RC522_START_RETRY_DELAY_MS 100
 
 static const char *s_json;
 
@@ -120,8 +120,22 @@ esp_err_t rc522_scanner_init(const char *dispatch_json) {
   rc522_register_events(s_scanner, RC522_EVENT_PICC_STATE_CHANGED,
                         on_picc_state_changed, NULL);
 
-  // --- Start scanning ---
-  ret = rc522_start(s_scanner);
-  ESP_LOGI(TAG, "rc522_start returned: %s", esp_err_to_name(ret));
+  // --- Start scanning (retry on intermittent FIFO self-test failure) ---
+  for (int attempt = 1; attempt <= RC522_START_RETRIES; attempt++) {
+    ret = rc522_start(s_scanner);
+    if (ret == ESP_OK) {
+      break;
+    }
+    ESP_LOGW(TAG, "rc522_start failed (attempt %d/%d): %s", attempt,
+             RC522_START_RETRIES, esp_err_to_name(ret));
+    vTaskDelay(pdMS_TO_TICKS(RC522_START_RETRY_DELAY_MS));
+  }
+
+  if (ret == ESP_OK) {
+    ESP_LOGI(TAG, "Scanning started");
+  } else {
+    ESP_LOGE(TAG, "Failed to start scanning after %d attempts",
+             RC522_START_RETRIES);
+  }
   return ret;
 }

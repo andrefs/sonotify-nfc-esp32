@@ -29,8 +29,12 @@ static bool init_spiffs(void) {
   }
 
   size_t total = 0, used = 0;
-  esp_spiffs_info(NULL, &total, &used);
-  ESP_LOGI(TAG, "SPIFFS total: %d, used: %d", total, used);
+  esp_err_t info_ret = esp_spiffs_info(NULL, &total, &used);
+  if (info_ret == ESP_OK) {
+    ESP_LOGI(TAG, "SPIFFS total: %zu, used: %zu", total, used);
+  } else {
+    ESP_LOGW(TAG, "Failed to read SPIFFS info (%s)", esp_err_to_name(info_ret));
+  }
   return true;
 }
 
@@ -113,11 +117,11 @@ bool dispatch_lookup(const char *json, const char *uid_hex,
   cJSON *contentType = cJSON_GetObjectItem(selected, "contentType");
 
   ESP_LOGI(TAG, "Found entity with contentId: %s",
-           contentId ? contentId->valuestring : "null");
+           cJSON_IsString(contentId) ? contentId->valuestring : "null");
   ESP_LOGI(TAG, "Description: %s",
-           description ? description->valuestring : "null");
+           cJSON_IsString(description) ? description->valuestring : "null");
   ESP_LOGI(TAG, "ContentType: %s",
-           contentType ? contentType->valuestring : "null");
+           cJSON_IsString(contentType) ? contentType->valuestring : "null");
 
   if (!cJSON_IsString(contentId)) {
     ESP_LOGE(TAG, "contentId not found or invalid");
@@ -133,7 +137,8 @@ bool dispatch_lookup(const char *json, const char *uid_hex,
   }
 
   ESP_LOGI(TAG, "Selected content id: %s (%s) %s", out_content_id,
-           description ? description->valuestring : "null", out_content_type);
+           cJSON_IsString(description) ? description->valuestring : "null",
+           out_content_type);
   ESP_LOGI(TAG, "SONOS Entity ID: %s", CONFIG_SONOS_ENTITY_ID);
 
   cJSON_Delete(root);
