@@ -75,7 +75,10 @@ static void on_picc_state_changed(void *arg, esp_event_base_t base,
                         content_type, sizeof(content_type))) {
       ha_client_send_webhook(CONFIG_HA_WEBHOOK_URL, content_id, content_type);
     } else {
-      ESP_LOGE(TAG, "Failed to select entity from JSON");
+      ESP_LOGW(TAG,
+               "Card not in dispatch.json. Add an entry with tagId \"%s\" to "
+               "add it",
+               uid_hex);
     }
 
   } else if (picc->state == RC522_PICC_STATE_IDLE &&
