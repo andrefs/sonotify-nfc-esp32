@@ -5,6 +5,8 @@
 #include <string.h>
 
 #include "cJSON.h"
+#include "esp_crt_bundle.h"
+#include "esp_http_client.h"
 #include "esp_log.h"
 #include "esp_spiffs.h"
 
@@ -64,9 +66,133 @@ static char *read_json_file(const char *filename) {
   return json;
 }
 
+static bool write_json_file(const char *filename, const char *json) {
+  FILE *f = fopen(filename, "w");
+  if (!f) {
+    ESP_LOGE(TAG, "Failed to open file for writing: %s", filename);
+    return false;
+  }
+
+  bool ok = fputs(json, f) >= 0;
+  if (fclose(f) != 0) {
+    ok = false;
+  }
+  return ok;
+}
+
+typedef struct {
+  char *data;
+  size_t len;
+  size_t cap;
+} http_body_t;
+
+static esp_err_t http_event_handler(esp_http_client_event_t *event) {
+  if (event->event_id != HTTP_EVENT_ON_DATA) {
+    return ESP_OK;
+  }
+  http_body_t *body = (http_body_t *)event->user_data;
+  size_t new_len = body->len + event->data_len;
+  if (new_len >= body->cap) {
+    size_t new_cap = body->cap ? body->cap * 2 : 256;
+    while (new_cap < new_len) {
+      new_cap *= 2;
+    }
+    char *new_data = realloc(body->data, new_cap + 1);
+    if (!new_data) {
+      ESP_LOGE(TAG, "Out of memory while reading HTTP body");
+      return ESP_ERR_NO_MEM;
+    }
+    body->data = new_data;
+    body->cap = new_cap;
+  }
+  memcpy(body->data + body->len, event->data, event->data_len);
+  body->len = new_len;
+  return ESP_OK;
+}
+
+static char *fetch_dispatch_json(const char *url) {
+  http_body_t body = {0};
+  esp_http_client_config_t config = {
+      .url = url,
+      .method = HTTP_METHOD_GET,
+      .user_data = &body,
+      .crt_bundle_attach = esp_crt_bundle_attach,
+      .timeout_ms = 5000,
+  };
+
+  esp_http_client_handle_t client = esp_http_client_init(&config);
+  if (!client) {
+    ESP_LOGE(TAG, "Failed to init HTTP client");
+    return NULL;
+  }
+
+  esp_err_t err = esp_http_client_perform(client);
+  int status = esp_http_client_get_status_code(client);
+  esp_http_client_cleanup(client);
+
+  if (err != ESP_OK || status != 200 || body.data == NULL) {
+    ESP_LOGW(TAG, "GET %s failed: err=%s status=%d", url, esp_err_to_name(err),
+             status);
+    free(body.data);
+    return NULL;
+  }
+
+  body.data[body.len] = '\0';
+  return body.data;
+}
+
+static bool dispatch_sane(const char *json) {
+  cJSON *root = cJSON_Parse(json);
+  if (!root) {
+    ESP_LOGE(TAG, "Fetched dispatch JSON failed to parse");
+    return false;
+  }
+
+  if (!cJSON_IsArray(root) || cJSON_GetArraySize(root) == 0) {
+    ESP_LOGE(TAG, "Fetched dispatch JSON is not a non-empty array");
+    cJSON_Delete(root);
+    return false;
+  }
+
+  cJSON *item;
+  cJSON_ArrayForEach(item, root) {
+    cJSON *tagId = cJSON_GetObjectItem(item, "tagId");
+    cJSON *contentId = cJSON_GetObjectItem(item, "contentId");
+    if (!cJSON_IsString(tagId) || !cJSON_IsString(contentId)) {
+      ESP_LOGE(TAG, "Fetched dispatch JSON entry missing tagId/contentId");
+      cJSON_Delete(root);
+      return false;
+    }
+  }
+
+  cJSON_Delete(root);
+  return true;
+}
+
 char *dispatch_load(void) {
   if (!init_spiffs()) {
     return NULL;
+  }
+
+  const char *url = CONFIG_DISPATCH_SOURCE_URL;
+  if (url[0] != '\0') {
+    char *fetched = fetch_dispatch_json(url);
+    if (fetched != NULL) {
+      if (dispatch_sane(fetched)) {
+        if (write_json_file("/spiffs/dispatch.json", fetched)) {
+          ESP_LOGI(TAG, "Dispatch JSON updated from %s", url);
+          return fetched;
+        }
+        ESP_LOGW(TAG, "Failed to persist fetched dispatch JSON");
+      } else {
+        ESP_LOGW(TAG, "Fetched dispatch JSON failed sanity check");
+      }
+      free(fetched);
+      ESP_LOGW(TAG, "Falling back to SPIFFS copy");
+    } else {
+      ESP_LOGW(TAG, "Failed to fetch dispatch JSON from %s, using SPIFFS",
+               url);
+    }
   }
   return read_json_file("/spiffs/dispatch.json");
 }

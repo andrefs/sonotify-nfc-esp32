@@ -83,4 +83,14 @@ config SONOS_ENTITY_ID
         Home Assistant entity_id of the Sonos speaker, for example:
             media_player.living_room
 
+config DISPATCH_SOURCE_URL
+    string "Dispatch JSON source URL"
+    default ""
+    help
+        URL to fetch dispatch.json from at boot (http:// or https://).
+        If empty, the dispatch table is loaded from SPIFFS only.
+        If set, the firmware fetches the JSON, validates it, and stores a
+        copy in SPIFFS. A bad fetch or invalid payload falls back to the
+        SPIFFS copy already on device.
+
 endmenu

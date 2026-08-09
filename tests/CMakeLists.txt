@@ -37,7 +37,8 @@ target_include_directories(dispatch_tests PRIVATE
     ${CJSON_INCLUDE_DIR})
 
 target_compile_definitions(dispatch_tests PRIVATE
-    CONFIG_SONOS_ENTITY_ID="media_player.roam_2")
+    CONFIG_SONOS_ENTITY_ID="media_player.roam_2"
+    CONFIG_DISPATCH_SOURCE_URL="")
 
 target_link_libraries(dispatch_tests PRIVATE ${CJSON_LIBRARY} m)
 

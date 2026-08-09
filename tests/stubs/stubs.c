@@ -1,4 +1,5 @@
 #include "esp_err.h"
+#include "esp_http_client.h"
 #include "esp_spiffs.h"
 
 const char *esp_err_to_name(esp_err_t code) {
@@ -32,3 +33,27 @@ esp_err_t esp_spiffs_info(const char *partition_label, size_t *total_bytes,
   }
   return ESP_OK;
 }
+
+static esp_http_client_handle_t s_client_handle = (esp_http_client_handle_t)0x1;
+
+esp_http_client_handle_t esp_http_client_init(const esp_http_client_config_t *config) {
+  (void)config;
+  return s_client_handle;
+}
+
+esp_err_t esp_http_client_perform(esp_http_client_handle_t handle) {
+  (void)handle;
+  return ESP_FAIL;
+}
+
+esp_err_t esp_http_client_cleanup(esp_http_client_handle_t handle) {
+  (void)handle;
+  return ESP_OK;
+}
+
+int esp_http_client_get_status_code(esp_http_client_handle_t handle) {
+  (void)handle;
+  return 404;
+}
+
+void esp_crt_bundle_attach(void) {}
