@@ -31,7 +31,7 @@ static bool init_spiffs(void) {
   }
 
   size_t total = 0, used = 0;
-  esp_err_t info_ret = esp_spiffs_info(NULL, &total, &used);
+  esp_err_t info_ret = esp_spiffs_info("spiffs", &total, &used);
   if (info_ret == ESP_OK) {
     ESP_LOGI(TAG, "SPIFFS total: %zu, used: %zu", total, used);
   } else {
@@ -115,6 +115,7 @@ static char *fetch_dispatch_json(const char *url) {
   esp_http_client_config_t config = {
       .url = url,
       .method = HTTP_METHOD_GET,
+      .event_handler = http_event_handler,
       .user_data = &body,
       .crt_bundle_attach = esp_crt_bundle_attach,
       .timeout_ms = 5000,
@@ -138,6 +139,7 @@ static char *fetch_dispatch_json(const char *url) {
   }
 
   body.data[body.len] = '\0';
+  ESP_LOGI(TAG, "Fetched JSON (%zu bytes): %s", body.len, body.data);
   return body.data;
 }
 
@@ -175,6 +177,7 @@ char *dispatch_load(void) {
   }
 
   const char *url = CONFIG_DISPATCH_SOURCE_URL;
+  ESP_LOGI(TAG, "Dispatch JSON source URL: %s", url);
   if (url[0] != '\0') {
     char *fetched = fetch_dispatch_json(url);
     if (fetched != NULL) {
